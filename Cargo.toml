@@ -1,0 +1,12 @@
+[package]
+name = "mbbs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "bd5fe196f1ce4b748bcd3c925495cb322bca00cd", features = ["tokio", "bluetooth-le"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+time = { version = "0.3.44", features = ["formatting"] }
+tokio = "1.48.0"
