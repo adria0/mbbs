@@ -5,10 +5,16 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
+chrono = "0.4.42"
+clap = { version = "4.5.51", features = ["derive"] }
 dotenvy = "0.15.7"
-meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "bd5fe196f1ce4b748bcd3c925495cb322bca00cd", features = ["tokio", "bluetooth-le"] }
+env_logger = "0.11.8"
+log = "0.4.28"
+meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "0a3a9dae0e206f95f8a9219d726f6e01ffe641c6", features = ["tokio", "bluetooth-le"] }
 serde = { version = "1.0.228", features = ["derive"] }
+serde_cbor = "0.11.2"
 serde_json = "1.0.145"
 teloxide = "0.17.0"
 time = { version = "0.3.44", features = ["formatting"] }
 tokio = "1.48.0"
+tokio-util = "0.7.17"
