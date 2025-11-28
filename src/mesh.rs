@@ -78,9 +78,8 @@ pub async fn repl() -> Result<()> {
                 }
 
                 let mut new_handler = service::Service::from_ble(&device_name).await?;
-                println!("Using device: {}", device_name);
-
-                if let Err(err) = wait_for_ready(&mut new_handler, 20).await {
+                println!("Using device: {}, booting..", device_name);
+                if let Err(err) = new_handler.wait_for_boot_ready(30).await {
                     println!("Error: {}", err);
                 }
 
@@ -129,33 +128,6 @@ pub async fn repl() -> Result<()> {
 
             _ => {
                 println!("Unknown command: {}", command);
-            }
-        }
-    }
-    Ok(())
-}
-
-pub async fn wait_for_ready(handler: &mut Handler, timeout_secs: u64) -> Result<()> {
-    print!("Waiting device to get ready...");
-    std::io::stdout().flush()?;
-    let now = tokio::time::Instant::now();
-    loop {
-        tokio::select! {
-            status = handler.status_rx.recv() => {
-                let Some(status) = status else { bail!("Channel closed"); };
-                print!(".");
-                std::io::stdout().flush()?;
-                if status == service::Status::Ready {
-                    println!("Ok");
-                    break;
-                }
-            },
-            _ = handler.cancel.cancelled() => break,
-            _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                print!(".");
-                if now.elapsed().as_secs() >= timeout_secs {
-                    bail!("Timeout reached");
-                }
             }
         }
     }

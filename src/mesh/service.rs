@@ -26,6 +26,8 @@ use meshtastic::{
     },
 };
 
+use crate::mesh::service;
+
 use super::router::*;
 pub use super::types::*;
 
@@ -142,6 +144,26 @@ impl HandlerState {
 }
 
 impl Handler {
+    pub async fn wait_for_boot_ready(&mut self, timeout_secs: u64) -> Result<()> {
+        let now = tokio::time::Instant::now();
+        loop {
+            tokio::select! {
+                status = self.status_rx.recv() => {
+                    let Some(status) = status else { bail!("Channel closed"); };
+                    if status == service::Status::Ready {
+                        break;
+                    }
+                },
+                _ = self.cancel.cancelled() => bail!("Cancelled"),
+                _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                    if now.elapsed().as_secs() >= timeout_secs {
+                        bail!("Timeout reached");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
     pub async fn send_text<T: Into<String>, D: Into<Destination>>(
         &self,
         text: T,
