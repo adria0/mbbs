@@ -3,12 +3,7 @@ use std::{io::Write, time::Duration};
 use anyhow::{Result, bail};
 use tokio::signal;
 
-use crate::mesh::service::Handler;
-
-mod router;
-mod service;
-mod types;
-mod utils;
+use crate::mesh::service::{self, Handler, Service};
 
 pub async fn dump_ble_devices() -> Result<()> {
     let devices = meshtastic::utils::stream::available_ble_devices(Duration::from_secs(2)).await?;
@@ -77,7 +72,7 @@ pub async fn repl() -> Result<()> {
                     println!("Disconnected.");
                 }
 
-                let mut new_handler = service::Service::from_ble(&device_name).await?;
+                let mut new_handler = Service::from_ble(&device_name).await?;
                 println!("Using device: {}, booting..", device_name);
                 if let Err(err) = new_handler.wait_for_boot_ready(30).await {
                     println!("Error: {}", err);
@@ -87,7 +82,8 @@ pub async fn repl() -> Result<()> {
             }
             "listen" => {
                 if let Some(mut handler) = handler.as_mut() {
-                    listen(&mut handler).await?;
+                    let all = line.len() > 1 && line[1] == "all";
+                    listen(&mut handler, all).await?;
                 }
             }
             "send" => {
@@ -110,7 +106,7 @@ pub async fn repl() -> Result<()> {
 
                     println!("Sending message to{}...", short_name);
                     handler.send_text(message, user_id).await?;
-                    listen(&mut handler).await?;
+                    listen(&mut handler, false).await?;
                 }
             }
             "nodes" => {
@@ -134,7 +130,7 @@ pub async fn repl() -> Result<()> {
     Ok(())
 }
 
-pub async fn listen(handler: &mut Handler) -> Result<()> {
+pub async fn listen(handler: &mut Handler, all: bool) -> Result<()> {
     println!("Listening for messages...press Ctrl+C to exit");
     loop {
         tokio::select! {
@@ -160,7 +156,11 @@ pub async fn listen(handler: &mut Handler) -> Result<()> {
                     service::Status::Heartbeat(_packet_count) => {
                         println!("Heartbeat.");
                     },
-                    _ => {}
+                    service::Status::FromRadio(from_radio) => {
+                        if all {
+                            println!("{:?}\n", from_radio);
+                        }
+                    },
                 }
             }
             _ = handler.cancel.cancelled() => break,

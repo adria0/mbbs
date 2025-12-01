@@ -11,6 +11,7 @@ use clap::{Parser, Subcommand};
 use meshtastic::protobufs::MeshPacket;
 
 mod mesh;
+mod repl;
 mod service;
 mod storage;
 mod telegram;
@@ -59,7 +60,7 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
     match cli.command {
-        Commands::Repl => mesh::repl().await?,
+        Commands::Repl => repl::repl().await?,
         Commands::Start => start().await?,
         Commands::Discover => discover().await?,
         Commands::Dump { file } => dump(file).await?,

@@ -1,4 +1,5 @@
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
+use log::error;
 use std::{collections::HashMap, future::pending, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -26,32 +27,35 @@ use meshtastic::{
     },
 };
 
-use crate::mesh::service;
-
 use super::router::*;
 pub use super::types::*;
 
-#[macro_export]
 macro_rules! r {
     ($slf:ident . $field:ident) => {
         $slf.state.read().await.$field
     };
 }
-#[macro_export]
 macro_rules! w {
     ($slf:ident . $field:ident) => {
         $slf.state.write().await.$field
     };
 }
-
+macro_rules! check {
+    ($expr:expr) => {
+        if let Err(err) = $expr {
+            error!("Failed `{}` : {:?}", stringify!($expr), err);
+        }
+    };
+}
 use TextMessageStatus::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Status {
     Heartbeat(usize),
     Ready,
     NewMessage(u32),
     UpdatedMessage(u32),
+    FromRadio(FromRadio),
 }
 
 #[derive(Default)]
@@ -150,7 +154,7 @@ impl Handler {
             tokio::select! {
                 status = self.status_rx.recv() => {
                     let Some(status) = status else { bail!("Channel closed"); };
-                    if status == service::Status::Ready {
+                    if status == Status::Ready {
                         break;
                     }
                 },
@@ -254,17 +258,24 @@ impl Service {
     }
     pub async fn start(mut self) -> Result<()> {
         let mut buffer_flushed = false;
-        self.status_tx.send(Status::Heartbeat(0))?;
         let mut packet_count = 0;
         let mut hearthbeat_interval = 1000;
+        let mut ret = Ok(());
+
+        check!(self.status_tx.send(Status::Heartbeat(0)));
         loop {
             tokio::select! {
                 from_radio = self.packet_rx.recv() => {
                     packet_count += 1;
                     let Some(from_radio) = from_radio else {
-                        bail!("BLE stream closed");
+                        ret = Err(anyhow!("BLE stream closed"));
+                        break;
                     };
-                    self.process_from_radio(from_radio).await?;
+                    check!(self.status_tx.send(Status::FromRadio(from_radio.clone())));
+
+                    if let Err(error) = self.process_from_radio(from_radio.clone()).await {
+                        error!("Error processing packet: {:?} : {}", from_radio, error);
+                    }
                 }
                 msg = async {
                     if buffer_flushed {
@@ -274,17 +285,18 @@ impl Service {
                     }
                 } => {
                     let Some(msg) = msg else {
-                        bail!("Text message stream closed");
+                        ret = Err(anyhow!("Text message stream closed"));
+                        break;
                     };
-                    self.process_send_text(msg).await?;
+                    check!(self.process_send_text(msg.clone()).await);
                 }
                 _ = tokio::time::sleep(Duration::from_millis(hearthbeat_interval)) => {
                     if !buffer_flushed && self.config_complete {
                         buffer_flushed = true;
                         hearthbeat_interval = 10_000;
-                        self.status_tx.send(Status::Ready)?;
+                        check!(self.status_tx.send(Status::Ready));
                     } else {
-                        self.status_tx.send(Status::Heartbeat(packet_count))?;
+                        check!(self.status_tx.send(Status::Heartbeat(packet_count)));
                     }
                 }
                 _ = self.cancel.cancelled() => {
@@ -292,10 +304,12 @@ impl Service {
                 }
             }
         }
+
         self.packet_rx.close();
-        self.stream_api.disconnect().await?;
-        self.finished_tx.send(()).unwrap();
-        Ok(())
+        check!(self.stream_api.disconnect().await);
+        check!(self.finished_tx.send(()));
+
+        ret
     }
 
     async fn process_send_text(&mut self, msg: TextMessage) -> Result<()> {
