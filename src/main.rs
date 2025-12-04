@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use meshtastic::api::StreamApi;
 use meshtastic::protobufs::MeshPacket;
 
 mod bbs;
@@ -18,6 +19,8 @@ mod storage;
 mod telegram;
 mod utils;
 
+use meshtastic::utils::generate_rand_id;
+use meshtastic::utils::stream::{BleId, build_ble_stream};
 use serde_cbor::Deserializer;
 use storage::Storage;
 use tokio::select;
@@ -44,6 +47,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Fast check
+    FastCheck,
     /// Discover BLE nodes
     Repl,
     /// Start the network node
@@ -67,11 +72,42 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
     match cli.command {
+        Commands::FastCheck => fast_check().await?,
         Commands::Repl => repl::repl().await?,
         Commands::Start => start().await?,
         Commands::Discover => discover().await?,
         Commands::Dump { file } => dump(file).await?,
     }
+
+    Ok(())
+}
+
+async fn fast_check() -> Result<()> {
+    log::info!("Fast check...");
+    let mut devices =
+        meshtastic::utils::stream::available_ble_devices(Duration::from_secs(5)).await?;
+    if devices.is_empty() {
+        log::warn!("No BLE devices found");
+        return Ok(());
+    }
+    let device_name = devices.remove(0).name.unwrap();
+    log::info!("Connecting to device {device_name}");
+
+    let ble_stream = build_ble_stream(&BleId::from_name(&device_name), Duration::from_secs(5))
+        .await
+        .expect("Unable to build BLE stream");
+
+    let stream_api = StreamApi::new();
+    log::info!("Opening stream API");
+    let (mut packet_rx, stream_api) = stream_api.connect(ble_stream).await;
+    let config_id = generate_rand_id();
+    log::info!("Asking for configuration");
+    let _stream_api = stream_api
+        .configure(config_id)
+        .await
+        .expect("Unable to open stream api");
+    log::info!("Getting first packet");
+    println!("{:?}", packet_rx.recv().await);
 
     Ok(())
 }

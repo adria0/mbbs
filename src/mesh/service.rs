@@ -157,6 +157,7 @@ impl Handler {
         loop {
             tokio::select! {
                 status = self.status_rx.recv() => {
+                    println!("self.status_rx.recv()");
                     let Some(status) = status else { bail!("Channel closed"); };
                     if status == Status::Ready {
                         break;
@@ -264,24 +265,28 @@ impl Service {
         let mut buffer_flushed = false;
         let mut packet_count = 0;
         let mut hearthbeat_counter = 0;
-        let mut msg_queue = VecDeque::new();
+        // let mut msg_queue = VecDeque::new();
         let mut ret = Ok(());
 
         check!(self.status_tx.send(Status::Heartbeat(0)));
         loop {
             tokio::select! {
                 from_radio = self.packet_rx.recv() => {
+                    println!("self.packet_rx.recv()");
+
                     packet_count += 1;
                     let Some(from_radio) = from_radio else {
                         ret = Err(anyhow!("BLE stream closed"));
                         break;
                     };
+                    println!("Received packet: {:?}", from_radio);
                     check!(self.status_tx.send(Status::FromRadio(from_radio.clone())));
 
                     if let Err(error) = self.process_from_radio(from_radio.clone()).await {
                         error!("Error processing packet: {:?} : {}", from_radio, error);
                     }
                 }
+                /*
                 msg = self.msg_rx.recv() => {
                     let Some(msg) = msg else {
                         ret = Err(anyhow!("Text message stream closed"));
@@ -289,19 +294,29 @@ impl Service {
                     };
                     msg_queue.push_back(msg);
                 }
-                _ = tokio::time::sleep(Duration::from_millis(1000)) => {
+                */
+                _ = tokio::time::sleep(Duration::from_millis(500)) => {
                     hearthbeat_counter += 1;
 
+                    // Each 500 ms
                     if !buffer_flushed && self.config_complete {
                         buffer_flushed = true;
+                        println!("Buffer flushed");
                         check!(self.status_tx.send(Status::Ready));
                     }
-                    if hearthbeat_counter % 10 == 0 {
+
+                    // Each second
+                    if hearthbeat_counter % 2 == 0 {
+                        //if let Some(msg) = msg_queue.pop_front() {
+                        //    check!(self.process_send_text(msg.clone()).await);
+                        //}
+                    }
+
+                    // Each 10 second
+                    if hearthbeat_counter % 20 == 0 {
                         check!(self.status_tx.send(Status::Heartbeat(packet_count)));
                     }
-                    if let Some(msg) = msg_queue.pop_front() {
-                        check!(self.process_send_text(msg.clone()).await);
-                    }
+
                 }
                 _ = self.cancel.cancelled() => {
                     break;

@@ -14,7 +14,7 @@ dotenvy = "0.15.7"
 env_logger = "0.11.8"
 futures = "0.3.31"
 log = "0.4.28"
-meshtastic = { git = "https://github.com/meshtastic/rust.git", features = ["tokio", "bluetooth-le"] }
+meshtastic = { git = "https://github.com/meshtastic/rust.git", rev = "0a3a9dae0e206f95f8a9219d726f6e01ffe641c6", features = ["tokio", "bluetooth-le"] }
 mini-moka = "0.10.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_cbor = "0.11.2"

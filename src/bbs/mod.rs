@@ -40,7 +40,6 @@ impl<S: Storage> BBS<S> {
     }
     pub async fn handle(
         &mut self,
-        handler: &mut Handler,
         user_pk_hash: [u8; 32],
         radio_userid: u32,
         command: &str,
@@ -106,9 +105,6 @@ impl<S: Storage> BBS<S> {
                     .await?;
 
                 return Ok("Ack".into());
-            }
-            "/get" if command.len() == 1 => {
-                // Aki
             }
             _ => bail!("Unknown command"),
         }
